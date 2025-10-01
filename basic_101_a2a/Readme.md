@@ -1,4 +1,4 @@
-# basic_101_a2a: Unleash Efficient Multi-Agent Communication  
+# basic_101_a2a: Simple and Efficient Multi-Agent Communication  
 
 ![Demo Screenshot](https://github.com/carloderossi/a2a/blob/main/basic_101_a2a/Screenshot%202025-10-01%20142544.jpg)
 
@@ -47,16 +47,9 @@ Whether you want to process research queries, generate structured plans, or chai
 
 | Component      | Details |
 |----------------|---------|
-| ⚙️ **Architecture** | Python-based, no explicit architecture (monolithic/simple modular design). |
-| 🔩 **Code Quality** | Consistent naming/indentation; some inline comments; lacks formal PEP8 enforcement. |
-| 📄 **Documentation** | Minimal documentation; missing docstrings for functions and classes. |
-| 🔌 **Integrations** | No external APIs or third-party integrations. |
-| 🧩 **Modularity** | Multiple modules exist, but no explicit dependency injection or strong separation of concerns. |
-| 🧪 **Testing** | No unit/integration tests; lacks automated testing framework. |
-| ⚡️ **Performance** | No optimizations (e.g., caching, parallelism) implemented. |
-| 🛡️ **Security** | No encryption or security controls present. |
-| 📦 **Dependencies** | No external dependencies; no `requirements.txt`. |
-| 🚀 **Scalability** | No explicit scalability features (e.g., load balancing, distributed design). |
+| ⚙️ **Architecture** | Python-based, leverage [Google Agent-to-Agent (A2A) protocol](https://a2a-protocol.org/latest/guides/) |
+| 📄 **Documentation** | See comments for functions and classes. |
+| 📦 **Dependencies** | See [requirements.txt](https://github.com/carloderossi/a2a/blob/main/requirements.txt). |
 
 ---
 
