@@ -1,0 +1,13 @@
+C:\Users\carlo>cd C:\Carlo\projects\a2a
+
+# Create a new venv called 
+python -m venv a2a-env
+
+# Activate the environment
+.\a2a-env\Scripts\activate
+
+pip install -r requirements.txt
+
+pip list
+
+THE A2A REGISTRY and its CLIENT is BROKEN: just use request instead
