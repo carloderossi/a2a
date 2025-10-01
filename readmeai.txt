@@ -1,0 +1,1 @@
+(.venv) C:\Carlo\projects\readmeai>readmeai --repository https://github.com/carloderossi/a2a/tree/main/basic_101_a2a --output readmeCDRai.md --api ollama --model deepseek-r1:latest --badge-color A931EC --badge-style flat-square --header-style compact --navigation-style fold --temperature 0.9 --tree-depth 2 --logo animated --logo-size 35% --emojis solar
