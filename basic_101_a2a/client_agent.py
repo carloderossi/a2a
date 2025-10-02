@@ -16,6 +16,17 @@ import requests
 import uuid
 import time
 import logging
+import httpx
+from a2a.client import A2ACardResolver, A2AClient
+from a2a.types import (
+    AgentCard,
+    Message,
+    MessageSendParams,
+    Part,
+    Role,
+    SendMessageRequest,
+    TextPart,
+)
 
 # URLs for the two agent servers
 RESEARCH_URL = "http://localhost:9001/"
@@ -35,7 +46,7 @@ logging.basicConfig(
 )
 
 
-def fetch_agent_card(base_url):
+async def fetch_agent_card(base_url):
     """
     Retrieve the Agent Card from an A2A-compliant agent server.
     
@@ -56,9 +67,14 @@ def fetch_agent_card(base_url):
         Agent Card Specification: https://a2a-protocol.org/latest/spec/#agent-cards
         Well-known endpoint format: {base_url}/.well-known/agent-card.json
     """
-    resp = requests.get(f"{base_url}.well-known/agent-card.json", timeout=5)
-    resp.raise_for_status()
-    return resp.json()
+    async with httpx.AsyncClient() as httpx_client:
+        resolver = A2ACardResolver(
+            httpx_client=httpx_client,
+            base_url=base_url,
+        )
+        logging.info(f"Fetching Agent Card from {base_url}.well-known/agent-card.json")
+        card = await resolver.get_agent_card()
+        return card
 
 
 def rpc_call(base_url, method, params):
@@ -176,7 +192,7 @@ def run_message(base_url, text):
         time.sleep(1)
 
 
-def main():
+async def main():
     """
     Main execution function demonstrating A2A agent orchestration.
     
@@ -198,13 +214,13 @@ def main():
     """
     # Fetch metadata from both agents to verify they're available and properly configured
     # This demonstrates the A2A service discovery pattern using Agent Cards
-    research_card = fetch_agent_card(RESEARCH_URL)
-    planner_card = fetch_agent_card(PLANNER_URL)
+    research_card = await fetch_agent_card(RESEARCH_URL)
+    planner_card = await fetch_agent_card(PLANNER_URL)
     
-    logging.info(f"Research AgentCard: {research_card['name']}")
-    print(f"{research_card}\n")
-    logging.info(f"Planner AgentCard: {planner_card['name']}")
-    print(f"{planner_card}\n")
+    logging.info(f"Research AgentCard: {research_card.name}")
+    print(research_card.model_dump_json(indent=2))
+    logging.info(f"Planner AgentCard: {planner_card.name}")
+    print(planner_card.model_dump_json(indent=2))
 
     # Define the initial user query
     query = "Summarize the latest approaches to reinforcement learning exploration."
@@ -225,7 +241,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
 
 
 """
