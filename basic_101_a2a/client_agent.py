@@ -17,7 +17,8 @@ import uuid
 import time
 import logging
 import httpx
-from a2a.client import A2ACardResolver, A2AClient
+from a2a.client.transports.jsonrpc import JsonRpcTransport
+from a2a.client import A2ACardResolver, A2AClient, ClientFactory, ClientConfig, A2AGrpcClient
 from a2a.types import (
     AgentCard,
     Message,
@@ -45,7 +46,18 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-
+def extract_text(resp) -> str | None:
+    """ Extracts the text content from an A2A response object."""
+    data = resp.model_dump()
+    try:
+        kind = data["result"]["kind"]
+        if not kind == "message":
+            logging.error(f"Unexpected result kind: {kind}")
+            return None
+        return data["result"]["parts"][0]["text"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    
 async def fetch_agent_card(base_url):
     """
     Retrieve the Agent Card from an A2A-compliant agent server.
@@ -76,56 +88,7 @@ async def fetch_agent_card(base_url):
         card = await resolver.get_agent_card()
         return card
 
-
-def rpc_call(base_url, method, params):
-    """
-    Make a JSON-RPC 2.0 call to an A2A agent server.
-    
-    This function implements the JSON-RPC protocol used by A2A agents for
-    communication. It handles request formatting, error checking, and
-    response parsing according to both JSON-RPC 2.0 and A2A specifications.
-    
-    Args:
-        base_url (str): Base URL of the agent server
-        method (str): RPC method name (e.g., "message/send", "tasks/get")
-        params (dict): Parameters to pass to the RPC method
-    
-    Returns:
-        dict: The result field from the JSON-RPC response
-    
-    Raises:
-        RuntimeError: If the agent returns an error in the response
-        requests.HTTPError: If the HTTP request fails
-    
-    A2A Reference:
-        JSON-RPC Methods: https://a2a-protocol.org/latest/spec/#json-rpc-methods
-        Common methods include: message/send, message/stream, tasks/get, tasks/list
-    """
-    # Construct a JSON-RPC 2.0 request payload
-    payload = {
-        "jsonrpc": "2.0",  # Protocol version
-        "id": str(uuid.uuid4()),  # Unique request identifier for matching responses
-        "method": method,  # The RPC method to invoke
-        "params": params,  # Method-specific parameters
-    }
-    
-    # Send the RPC request with a generous timeout (5 minutes for long-running tasks)
-    resp = requests.post(base_url, json=payload, timeout=300)
-    logging.info(f"RPC call response status: {resp.status_code}")
-    resp.raise_for_status()
-    
-    # Parse the JSON-RPC response
-    data = resp.json()
-    logging.info(f"RPC call response: {data}")
-    
-    # Check for RPC-level errors (distinct from HTTP errors)
-    if "error" in data:
-        raise RuntimeError(f"Agent error: {data['error']}")
-    
-    return data["result"]
-
-
-def run_message(base_url, text):
+async def run_message(card:AgentCard, query):
     """
     Send a message to an agent and wait for the complete response.
     
@@ -147,49 +110,41 @@ def run_message(base_url, text):
         Message/Send method: https://a2a-protocol.org/latest/spec/#messagesend
         Task Lifecycle: https://a2a-protocol.org/latest/spec/#task-lifecycle
         Task states: submitted → working → succeeded/failed
-    """
-    # Step 1: Send the message to the agent using the message/send RPC method
-    result = rpc_call(base_url, "message/send", {
-        "message": {
-            "role": "user",  # Message is from the user/client
-            "parts": [{"kind": "text", "text": text}],  # Message content
-            "messageId": str(uuid.uuid4())  # Unique message identifier
-        }
-    })
-    
-    # Handle immediate response (synchronous mode)
-    if result.get("kind") == "message":
-        # Extract all text parts from the message
-        text_parts = [p["text"] for p in result.get("parts", []) if p["kind"] == "text"]
-        return "\n".join(text_parts)
+    """    
+    async with httpx.AsyncClient(timeout=httpx.Timeout(360.0)) as httpx_client:
+        client = A2AClient(
+            httpx_client=httpx_client, agent_card=card
+        )
+        logging.info("A2AClient initialized")
 
-    # Handle async task response (streaming mode)
-    if result.get("kind") == "task":
-        return result["id"]
-    
-    # Extract task ID for polling
-    task_id = result.get("id")  
-    if not task_id:
-        raise RuntimeError(f"Unexpected result: {result}")
-
-    # Step 2: Poll the task endpoint until completion
-    # This implements the A2A task lifecycle polling pattern
-    while True:
-        # Query the task status using the tasks/get RPC method
-        status = rpc_call(base_url, "tasks/get", {"id": task_id})
+        message_payload = Message(
+            role=Role.user,
+            messageId=str(uuid.uuid4()),
+            parts=[Part(root=TextPart(text=query))],
+        )
+        logging.info(f"Message payload constructed: \n{message_payload} ")
+        request = SendMessageRequest(
+            id=str(uuid.uuid4()),
+            params=MessageSendParams(
+                message=message_payload,
+            ),
+        )
+        logging.info(f"SendMessageRequest constructed: \n{request} ")
+        """
+            params = MessageSendParams(
+            response_mode="complete",  # Get the full response in one go
+            max_response_tokens=1000,  # Limit response length
+            temperature=0.7,  # Creativity level
+            top_p=0.9,  # Nucleus sampling parameter
+        ) """
+        logging.info(f"Sending message to {card.name}...")
+        #response = await client.send_message(request)
+        response = await asyncio.wait_for(client.send_message(request), timeout=360)
         
-        # Check task state (handles both "status" and "state" field names)
-        state = status.get("status") or status.get("state")
+        logging.info("Response:")
+        print(response.model_dump_json(indent=2))
         
-        if state in ("succeeded", "completed"):
-            # Task completed successfully, return the output
-            return status.get("result", {}).get("output")
-        elif state in ("failed", "error"):
-            # Task failed, raise an error with details
-            raise RuntimeError(f"Task {task_id} failed: {status}")
-        
-        # Wait 1 second before polling again to avoid overwhelming the server
-        time.sleep(1)
+        return extract_text(response)
 
 
 async def main():
@@ -228,13 +183,13 @@ async def main():
     
     # Stage 1: Send query to Research Agent for information gathering
     logging.info("Sending query to Research agent...")
-    research_result = run_message(RESEARCH_URL, query)
+    research_result = await run_message(research_card, query)
     logging.info(f"\n[Research Result]\n{research_result}\n")
 
     # Stage 2: Send research results to Planner Agent for plan generation
     # This demonstrates agent chaining - output from one agent becomes input to another
     logging.info("Sending research result to Planner agent...")
-    plan_result = run_message(PLANNER_URL, research_result)
+    plan_result = await run_message(planner_card, research_result)
     logging.info(f"\n[Planner Result]\n{plan_result}\n")
 
     logging.info("Done.")
