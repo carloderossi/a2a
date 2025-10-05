@@ -1,4 +1,5 @@
 /a2a-env
+/.venv
 /a2aregistry_client.py
 /cdrollama.cmd - Shortcut.lnk
 /cdrpippo.lst
