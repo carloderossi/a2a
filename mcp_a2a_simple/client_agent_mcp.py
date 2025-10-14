@@ -49,17 +49,133 @@ logging.basicConfig(
 )
 
 def extract_text(resp) -> str | None:
-    """ Extracts the text content from an A2A response object."""
+    """Extracts the text content from an A2A response object."""
     data = resp.model_dump()
     try:
-        kind = data["result"]["kind"]
-        if not kind == "message":
+        kind = data.get("kind")
+        if kind != "message":
             logging.error(f"Unexpected result kind: {kind}")
             return None
-        return data["result"]["parts"][0]["text"]
+        parts = data.get("parts", [])
+        if not parts:
+            return None
+        first_part = parts[0]
+        if first_part.get("kind") == "text":
+            return first_part.get("text")
+        return None
     except (KeyError, IndexError, TypeError):
         return None
+
+def get_client(card:AgentCard, request_timeout=360.0, connect_timeout=60.0) -> A2AClient:
+    """
+    Create and configure an A2A client for communicating with an agent.
+
+    This function initializes an A2A client with custom timeout settings using the
+    ClientFactory pattern. The factory automatically selects the appropriate client
+    type based on the agent card's transport protocol (HTTP, gRPC, etc.).
+
+    Args:
+        card (AgentCard): The agent card containing metadata and connection information
+            for the target agent. Typically obtained via resolve_agent_card().
+        request_timeout (float, optional): Timeout in seconds for individual requests.
+            Defaults to 360.0 (6 minutes).
+        connect_timeout (float, optional): Timeout in seconds for establishing connections.
+            Defaults to 60.0 (1 minute).
+
+    Returns:
+        tuple: A tuple containing:
+            - A2AClient: Configured A2A client instance for sending messages
+            - httpx.AsyncClient: The underlying HTTP client (must be closed with aclose())
+
+    Example:
+        >>> card = await resolve_agent_card("agent://research-agent")
+        >>> client, httpx_client = get_client(card)
+        >>> try:
+        ...     async for chunk in client.send_message(message):
+        ...         response = chunk
+        ... finally:
+        ...     await httpx_client.aclose()  # Always clean up
+
+    Note:
+        - The streaming preference is set to False, but agents may still stream
+          if their implementation requires it
+        - The returned httpx_client must be properly closed using aclose() to
+          prevent resource leaks
+        - Custom timeouts are useful for long-running agent operations
+
+    A2A Reference:
+        Client Configuration: https://github.com/google-a2a/A2A
+    """
+    # Create httpx client with custom timeout
+    httpx_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(request_timeout, connect=connect_timeout)
+    )
+    # Configure client factory
+    config = ClientConfig(
+        streaming=False,  # Preference, but may still stream if agent requires it
+        httpx_client=httpx_client  # Pass custom httpx client
+    )
+    factory = ClientFactory(config)
+    client = factory.create(card)
+    print("A2AClient initialized via ClientFactory")
+    return client, httpx_client
+
+async def run_messagev2(card: AgentCard, query):
+    """
+    Send a message to an agent and wait for the complete response.
     
+    This function handles two possible response modes defined by the A2A protocol:
+    1. Immediate response: Agent returns the result directly (synchronous)
+    2. Async task: Agent returns a task ID, requiring polling for completion
+    
+    Args:
+        base_url (str): Base URL of the agent server
+        text (str): The message text to send to the agent
+    
+    Returns:
+        str: The agent's response text
+    
+    Raises:
+        RuntimeError: If the task fails or returns an unexpected result format
+    
+    A2A Reference:
+        Message/Send method: https://a2a-protocol.org/latest/spec/#messagesend
+        Task Lifecycle: https://a2a-protocol.org/latest/spec/#task-lifecycle
+        Task states: submitted → working → succeeded/failed
+    """    
+    client, httpx_client = get_client(card)
+    print("Creating message payload...")
+    #httpx_client = client.httpx_client  # Access the underlying httpx client
+    try:
+        message_payload = Message(
+            role=Role.user,
+            messageId=str(uuid.uuid4()),
+            parts=[Part(root=TextPart(text=query))],
+        )
+        print(f"Message payload constructed: \n{message_payload}")
+        
+        # Don't wrap in SendMessageRequest - pass Message directly
+        print(f"Sending message to {card.name}...")
+        
+        async def collect_response():
+            response = None
+            async for chunk in client.send_message(message_payload):
+                response = chunk
+                print(f"Received chunk")
+            return response
+        
+        response = await asyncio.wait_for(collect_response(), timeout=360)
+        
+        if response:
+            print("Response:")
+            print(response.model_dump_json(indent=2))
+            return extract_text(response)
+        else:
+            print("No response received")
+            return None
+    finally:
+        await httpx_client.aclose()  # Clean up the clientponse received")
+
 async def fetch_agent_card(agent_uri: str) -> AgentCard:
     """
     Retrieve the Agent Card from an A2A-compliant agent server.
@@ -85,65 +201,6 @@ async def fetch_agent_card(agent_uri: str) -> AgentCard:
         logging.info(f"Fetching Agent Card from {agent_uri}...")
         card = await resolve_agent_card(agent_uri)
         return card
-
-async def run_message(card:AgentCard, query):
-    """
-    Send a message to an agent and wait for the complete response.
-    
-    This function handles two possible response modes defined by the A2A protocol:
-    1. Immediate response: Agent returns the result directly (synchronous)
-    2. Async task: Agent returns a task ID, requiring polling for completion
-    
-    Args:
-        base_url (str): Base URL of the agent server
-        text (str): The message text to send to the agent
-    
-    Returns:
-        str: The agent's response text
-    
-    Raises:
-        RuntimeError: If the task fails or returns an unexpected result format
-    
-    A2A Reference:
-        Message/Send method: https://a2a-protocol.org/latest/spec/#messagesend
-        Task Lifecycle: https://a2a-protocol.org/latest/spec/#task-lifecycle
-        Task states: submitted → working → succeeded/failed
-    """    
-    async with httpx.AsyncClient(timeout=httpx.Timeout(360.0)) as httpx_client:
-        client = A2AClient(
-            httpx_client=httpx_client, agent_card=card
-        )
-        logging.info("A2AClient initialized")
-
-        message_payload = Message(
-            role=Role.user,
-            messageId=str(uuid.uuid4()),
-            parts=[Part(root=TextPart(text=query))],
-        )
-        logging.info(f"Message payload constructed: \n{message_payload} ")
-        request = SendMessageRequest(
-            id=str(uuid.uuid4()),
-            params=MessageSendParams(
-                message=message_payload,
-            ),
-        )
-        logging.info(f"SendMessageRequest constructed: \n{request} ")
-        """
-            params = MessageSendParams(
-            response_mode="complete",  # Get the full response in one go
-            max_response_tokens=1000,  # Limit response length
-            temperature=0.7,  # Creativity level
-            top_p=0.9,  # Nucleus sampling parameter
-        ) """
-        logging.info(f"Sending message to {card.name}...")
-        #response = await client.send_message(request)
-        response = await asyncio.wait_for(client.send_message(request), timeout=360)
-        
-        logging.info("Response:")
-        print(response.model_dump_json(indent=2))
-        
-        return extract_text(response)
-
 
 async def main():
     """
@@ -184,13 +241,13 @@ async def main():
     
     # Stage 1: Send query to Research Agent for information gathering
     logging.info("Sending query to Research agent...")
-    research_result = await run_message(research_card, query)
+    research_result = await run_messagev2(research_card, query)
     logging.info(f"\n[Research Result]\n{research_result}\n")
 
     # Stage 2: Send research results to Planner Agent for plan generation
     # This demonstrates agent chaining - output from one agent becomes input to another
     logging.info("Sending research result to Planner agent...")
-    plan_result = await run_message(planner_card, research_result)
+    plan_result = await run_messagev2(planner_card, research_result)
     logging.info(f"\n[Planner Result]\n{plan_result}\n")
 
     logging.info("Done.")
