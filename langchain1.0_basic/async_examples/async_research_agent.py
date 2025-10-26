@@ -36,13 +36,14 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+OLLAMA_SLM = "qwen3" # Default Ollama model
 
 class AsyncResearchAgent:
     """
     Enhanced async research agent with concurrent execution capabilities.
     """
     
-    def __init__(self, model_name: str = "llama3.1", temperature: float = 0.7):
+    def __init__(self, model_name: str = OLLAMA_SLM, temperature: float = 0.7):
         self.llm = ChatOllama(model=model_name, temperature=temperature)
         self.model_name = model_name
         logging.info(f"Initialized async researcher with {model_name}")

@@ -37,11 +37,12 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+OLLAMA_SLM = "qwen3" # Default Ollama model
 
 class ResearchAgent:
     """Simplified async research agent."""
     
-    def __init__(self, name: str, model: str = "llama3.1"):
+    def __init__(self, name: str, model: str = OLLAMA_SLM):
         self.name = name
         self.llm = ChatOllama(model=model, temperature=0.7)
         logging.info(f"Initialized {name}")
@@ -63,7 +64,7 @@ class ResearchAgent:
 class PlannerAgent:
     """Simplified async planner agent."""
     
-    def __init__(self, name: str, model: str = "llama3.1"):
+    def __init__(self, name: str, model: str = OLLAMA_SLM):
         self.name = name
         self.llm = ChatOllama(model=model, temperature=0.3)
         logging.info(f"Initialized {name}")

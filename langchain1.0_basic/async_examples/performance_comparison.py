@@ -35,11 +35,12 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+OLLAMA_SLM = "qwen3" # Default Ollama model
 
 class PerformanceTest:
     """Test harness for comparing sync vs async performance."""
     
-    def __init__(self, model: str = "llama3.1"):
+    def __init__(self, model: str = OLLAMA_SLM):
         self.model = model
         self.llm = ChatOllama(model=model, temperature=0.5)
     

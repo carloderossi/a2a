@@ -38,6 +38,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+OLLAMA_SLM = "qwen3" # Default Ollama model
 
 class ActionPlan(BaseModel):
     """Structured plan output."""
@@ -53,7 +54,7 @@ class AsyncPlannerAgent:
     Enhanced async planner with concurrent execution capabilities.
     """
     
-    def __init__(self, model_name: str = "llama3.1", temperature: float = 0.3):
+    def __init__(self, model_name: str = OLLAMA_SLM, temperature: float = 0.3):
         self.llm = ChatOllama(model=model_name, temperature=temperature)
         self.model_name = model_name
         logging.info(f"Initialized async planner with {model_name}")
@@ -256,7 +257,7 @@ async def demo_multi_model():
     print(f"{'='*70}{RESET}\n")
     
     research = "Developing an AI-powered customer service system"
-    models = ["llama3.1", "llama3.2"]  # Add more models if available
+    models = [OLLAMA_SLM, "llama3.2"]  # Add more models if available
     
     planner = AsyncPlannerAgent()
     results = await planner.multi_model_planning(research, models)
