@@ -41,8 +41,8 @@ async def register_agentcard(agentcard: AgentCard, agent_id: str):
         result = await client.call_tool("register_agent", {"card": json_card})
         print("Register result:", result)
         
-        if result and isinstance(result[0], TextContent):
-            message = result[0].text
+        if result and result.content and isinstance(result.content[0], TextContent):
+            message = result.content[0].text
             print("Register message:", message)
 
             if "Registered" in message:
@@ -70,8 +70,8 @@ async def remove_agentcard(agent_name: str):
         result = await client.call_tool("deregister_agent", {"name": agent_name})
         print("Deregister result:", result)
         
-        if result and isinstance(result[0], TextContent):
-            message = result[0].text
+        if result and result.content and isinstance(result.content[0], TextContent):
+            message = result.content[0].text
             print("Deregister message:", message)
 
             if "Deregistered" in message:
