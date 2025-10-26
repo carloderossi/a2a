@@ -58,6 +58,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+OLLAMA_SLM = "qwen3" # Default Ollama model
 
 class ActionPlan(BaseModel):
     """Structured output schema for action plans."""
@@ -78,7 +79,7 @@ class LangChainPlannerExecutor:
     
     def __init__(
         self,
-        model_name: str = "llama3.1",
+        model_name: str = OLLAMA_SLM,
         temperature: float = 0.3,
         use_structured_output: bool = False
     ):
@@ -270,7 +271,7 @@ def main():
     # Create the LangChain-based executor
     # You can enable structured output with compatible models
     executor = LangChainPlannerExecutor(
-        model_name="llama3.1",
+        model_name=OLLAMA_SLM,
         temperature=0.3,  # Lower temperature for more focused planning
         use_structured_output=False  # Set to True if model supports it
     )

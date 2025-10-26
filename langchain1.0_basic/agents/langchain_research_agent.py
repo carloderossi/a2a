@@ -55,6 +55,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+OLLAMA_SLM = "qwen3" # Default Ollama model
 
 class LangChainResearchExecutor:
     """
@@ -64,7 +65,7 @@ class LangChainResearchExecutor:
     and returns structured responses following the A2A protocol.
     """
     
-    def __init__(self, model_name: str = "llama3.1", temperature: float = 0.7):
+    def __init__(self, model_name: str = OLLAMA_SLM, temperature: float = 0.7):
         """
         Initialize the LangChain research executor.
         
@@ -183,7 +184,7 @@ def main():
     
     # Create the LangChain-based executor
     executor = LangChainResearchExecutor(
-        model_name="llama3.1",
+        model_name=OLLAMA_SLM,
         temperature=0.7
     )
     
