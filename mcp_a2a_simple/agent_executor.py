@@ -19,7 +19,7 @@ import uuid
 import logging
 
 # Ollama model configuration - using LLaMA 3.1 as the default SLM (Small Language Model)
-SLM_MODEL = "llama3.1"
+SLM_MODEL = "qwen3"
 
 # ANSI escape codes for colored terminal output
 LIGHT_BLUE = '\033[94m'
